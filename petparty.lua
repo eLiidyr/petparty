@@ -1,6 +1,6 @@
 _addon.name     = "petparty"
 _addon.author   = "Elidyr"
-_addon.version  = "1.20200907"
+_addon.version  = "1.20210115"
 _addon.command  = "pp"
 
 local res = require("resources")
@@ -16,6 +16,7 @@ local colors = {owner={r=10,g=250,b=230}, pet={r=10,g=250,b=100}, hpp={r=200,g=1
 local timer = {clock=0, delay=5}
 local jobs = {}
 local pets = {}
+local pettp = {}
 local bar_settings = {
     ["pos"]={["x"]=200,["y"]=200},["bg"]={["alpha"]=255,["red"]=0,["green"]=0,["blue"]=0,["visible"]=false},['flags']={["right"]=false,["bottom"]=false,["bold"]=false,["draggable"]=true,["italic"]=false},["padding"]=5,
     ["text"]={["size"]=10,["font"]="lucida console",["fonts"]={},["alpha"]=255,["red"]=255,["green"]=255,["blue"]=255,["stroke"]={["width"]=1,["alpha"]=255,["red"]=0,["green"]=0,["blue"]=0}},
@@ -70,6 +71,16 @@ local isInParty = function(owner)
     
 end
 
+windower.register_event("addon command", function(...)
+    local a = T{...}
+    local c = a[1] or false
+    
+    if c then
+        pettp[windower.ffxi.get_player().id] = c
+    end
+
+end)
+
 windower.register_event("prerender", function()
     
     if (os.clock()-timer.clock) > timer.delay then
@@ -80,7 +91,7 @@ windower.register_event("prerender", function()
         local pos = 0
     
         if party then
-        
+            
             for i,v in pairs(party) do
                 
                 if (i:sub(1,1) == "p" or i:sub(1,1) == "a") and tonumber(i:sub(2)) ~= nil then
@@ -92,10 +103,11 @@ windower.register_event("prerender", function()
                             owner = string.format("%s,%s,%s", colors.owner.r, colors.owner.g, colors.owner.b),
                             pet = string.format("%s,%s,%s", colors.pet.r, colors.pet.g, colors.pet.b),
                             hpp = string.format("%s,%s,%s", colors.hpp.r, colors.hpp.g, colors.hpp.b),
+                            tp = string.format("%s,%s,%s", colors.hpp.r, colors.hpp.g, colors.hpp.b),
                         }
                         
                         if owner and pet and pet.hpp > 0 then
-                            table.insert(temp, string.format(" \\cs(%s)%+15s\\cr\\cs(%s) [%s]\\cr%s► \\cs(%s)%s%%\\cr", color.owner, (owner.name):sub(1,12), color.pet, (pet.name):sub(1,10), ("----------"):sub(1, (10-(pet.name):len())), color.hpp, pet.hpp or 0))
+                            table.insert(temp, string.format(" \\cs(%s)%+15s\\cr\\cs(%s) [%s]\\cr%s► \\cs(%s)%03d%% || %04d%%\\cr", color.owner, (owner.name):sub(1,12), color.pet, (pet.name):sub(1,10), ("----------"):sub(1, (10-(pet.name):len())), color.hpp, pet.hpp or 0, pettp[owner.id] or 0))
                             
                             if not icons[count] then
                                 icons[count] = images.new({color={alpha = 255},texture={fit = false},draggable=false})
@@ -184,7 +196,27 @@ windower.register_event("incoming chunk", function(id,original,modified,injected
         if player and isInParty(player.id) then
             jobs[player.id] = job
         end
+
+    elseif id == 0x068 then
+        local player = windower.ffxi.get_player()
+        local packed = packets.parse('incoming', original)
+
+        if player and packed['Owner Index'] and packed['Pet TP'] and player.index == packed['Owner Index'] then
+            windower.send_ipc_message(string.format('%s:::%s', packed['Owner Index'], packed['Pet TP']))
+            windower.send_command(string.format('pp %s', packed['Pet TP']))
+
+        end
         
     end
     
+end)
+
+windower.register_event("ipc message", function(message)
+    local info = string.split(message, ':::')
+    local player = windower.ffxi.get_mob_by_index(info[1])
+
+    if player and isInParty(player.id) then
+        pettp[player.id] = info[2]
+    end
+
 end)
